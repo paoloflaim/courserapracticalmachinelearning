@@ -1,0 +1,156 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Paolo Flaim"
+date: "15 ottobre 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## Executive summary
+The goal of the project is to predict how well an exercise is done. All the data are available are coming from sensor appliend on the body and available in the [Human Activity Recognition](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har) archive. The data are labeled and the "classe" variable rapresent the outcome.
+After a data cleaning process we have used only the useful variables to train and choose the best model.
+Finally we choose the model trained with the method "Random forest", because it result the best in accuracy (99%) and have applied the prediction on the test dataset.
+
+###Data Description
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+### Data loading
+
+Downloading the dataset.
+```{r cache=TRUE}
+library(caret)
+library(rattle)
+
+trainingDataUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+trainingData <- read.csv(trainingDataUrl, header=TRUE, sep=",", stringsAsFactors = TRUE) 
+testingDataUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+testingData <- read.csv(testingDataUrl, header=TRUE, sep=",", stringsAsFactors = TRUE) 
+
+```
+ 
+ - Training dataset contains ```r dim(trainingData)[1]``` observations
+ - Testing dataset contains ```r dim(testingData)[1]``` observations
+
+
+
+### Data Cleaning
+Removing of all columns not useful for training the model (i.e. missing or not complete data)
+```{r  cache=TRUE}
+#check not significant columns
+columnCheck <- sapply(trainingData, function(x){sum(is.na(x) | x == "") < nrow(trainingData)*0.1 })
+#remove not significant columns
+trainDataClean <- trainingData[, columnCheck]
+trainDataClean <- trainDataClean[, -c(1:7)]
+#dim(trainDataClean)
+
+testDataClean <- testingData[, columnCheck]
+#dim(testDataClean)
+
+```
+The datasets contains only ```r dim(trainDataClean)[2]``` useful variables (instead of all ```r dim(trainingData)[2]``` variables).
+
+
+### Data partition
+
+Preparation of the partition for the training data.
+```{r cache=TRUE}
+
+set.seed(1234)
+partition <- createDataPartition(trainDataClean$classe, p = 0.6, list=FALSE)
+train <- trainDataClean[partition,]
+train.test <- trainDataClean[-partition,]
+```
+
+### Model Training
+It is used a cross-validation with n=5 to improve the results.
+```{r cache=TRUE}
+trainControl <- trainControl(method="cv", number=5)
+```
+
+#### Train with Classification tree method
+
+```{r cache=TRUE}
+fit.ct <- train(classe~., data=train, method="rpart", trControl=trainControl)
+fancyRpartPlot(fit.ct$finalModel)
+```
+
+Confusion matrix report:
+```{r cache=TRUE}
+fit.ct.test <- predict(fit.ct, newdata = train.test)
+confusionMatrix.fit.ct <- confusionMatrix(train.test$classe,fit.ct.test)
+confusionMatrix.fit.ct
+```
+
+Method accuracy:
+```{r cache=TRUE}
+confusionMatrix.fit.ct$overall[1]
+```
+
+#### Train with Random Forest method
+```{r cache=TRUE}
+
+fit.rf <- train(classe~., data=train, method="rf", trControl=trainControl, verbose=FALSE)
+print(fit.rf)
+plot(fit.rf,main="Accuracy of Random forest model by number of predictors")
+
+```
+
+Confusion matrix report:
+```{r cache=TRUE}
+fit.rf.test <- predict(fit.rf, newdata = train.test)
+confusionMatrix.fit.rf <- confusionMatrix(train.test$classe,fit.rf.test)
+confusionMatrix.fit.rf
+```
+
+Method accuracy:
+```{r cache=TRUE}
+confusionMatrix.fit.rf$overall[1]
+```
+
+Most important variables:
+```{r cache=TRUE}
+variableImportance.rf <- varImp(fit.rf)
+variableImportance.rf
+
+```
+
+
+#### Train with Gradient Boosting method
+```{r cache=TRUE}
+fit.gbm <- train(classe~., data=train, method="gbm", trControl=trainControl, verbose=FALSE)
+print(fit.gbm)
+
+```
+
+
+Confusion matrix report:
+```{r cache=TRUE}
+fit.gbm.test <- predict(fit.gbm, newdata = train.test)
+confusionMatrix.fit.gbm <- confusionMatrix(train.test$classe,fit.gbm.test)
+confusionMatrix.fit.gbm
+```
+
+Method accuracy:
+```{r cache=TRUE}
+confusionMatrix.fit.gbm$overall[1]
+```
+
+```{r cache=TRUE}
+plot(fit.gbm)
+```
+
+
+### Model selection
+The hightest accuracy is achieved from the Random Forest method, more than 99%.
+
+### Prediction
+The selected model is applied on the test set:
+```{r cache=TRUE}
+pred.rf.test <- predict(fit.rf, newdata = testDataClean)
+pred.rf.test
+```
+
